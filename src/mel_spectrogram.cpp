@@ -521,8 +521,8 @@ bool log_mel_spectrogram(const float* samples, int n_samples,
     mel.n_len_org = mel.n_len;
     mel.data.resize(mel.n_mel * mel.n_len);
 
-    int compute_frames = total_frames;
-    int n_fft = filters.n_fft;
+    const int compute_frames = total_frames;
+    const int n_fft = filters.n_fft;
 
 #ifdef __APPLE__
     const float* hann_f = global_cache.hann_window_f;
@@ -567,35 +567,28 @@ bool log_mel_spectrogram(const float* samples, int n_samples,
     }
 
 #else
-    const double* hann = global_cache.hann_window;
+    MelSpectrogram temp_mel;
+    temp_mel.n_mel = mel.n_mel;
+    temp_mel.n_len = mel.n_len;
+    temp_mel.n_len_org = mel.n_len_org;
+    temp_mel.data.resize(temp_mel.n_mel * temp_mel.n_len);
 
-    std::vector<double> temp_data(mel.n_mel * compute_frames);
+    const int worker_threads = std::max(1, std::min(n_threads, temp_mel.n_len));
+    const float* hann_f = global_cache.hann_window_f;
 
-    for (int i = 0; i < compute_frames; i++) {
-        const int offset = i * frame_step;
-
-        std::vector<double> fft_in_d(frame_size, 0.0);
-        for (int j = 0; j < frame_size; j++) {
-            fft_in_d[j] = hann[j] * static_cast<double>(samples_padded[offset + j]);
+    if (worker_threads == 1) {
+        log_mel_spectrogram_worker(0, hann_f, samples_padded, static_cast<int>(samples_padded.size()),
+                                   frame_size, frame_step, 1, filters, temp_mel);
+    } else {
+        std::vector<std::thread> workers;
+        workers.reserve(worker_threads);
+        for (int ith = 0; ith < worker_threads; ++ith) {
+            workers.emplace_back(log_mel_spectrogram_worker, ith, hann_f, std::cref(samples_padded),
+                                 static_cast<int>(samples_padded.size()), frame_size, frame_step,
+                                 worker_threads, std::cref(filters), std::ref(temp_mel));
         }
-
-        std::vector<double> power(n_fft);
-        for (int k = 0; k < n_fft; k++) {
-            double re = 0.0, im = 0.0;
-            for (int n = 0; n < frame_size; n++) {
-                double angle = 2.0 * M_PI * k * n / frame_size;
-                re += fft_in_d[n] * cos(angle);
-                im -= fft_in_d[n] * sin(angle);
-            }
-            power[k] = re * re + im * im;
-        }
-
-        for (int j = 0; j < mel.n_mel; j++) {
-            double sum = 0.0;
-            for (int k = 0; k < n_fft; k++) {
-                sum += power[k] * static_cast<double>(filters.data[j * n_fft + k]);
-            }
-            temp_data[j * compute_frames + i] = log10(std::max(sum, 1e-10));
+        for (std::thread& worker : workers) {
+            worker.join();
         }
     }
 #endif
@@ -604,7 +597,11 @@ bool log_mel_spectrogram(const float* samples, int n_samples,
     double mmax = -1e20;
     for (int j = 0; j < mel.n_mel; j++) {
         for (int i = 0; i < mel.n_len; i++) {
+#ifdef __APPLE__
             double val = temp_data[j * compute_frames + i];
+#else
+            double val = temp_mel.data[j * mel.n_len + i];
+#endif
             if (val > mmax) {
                 mmax = val;
             }
@@ -615,7 +612,11 @@ bool log_mel_spectrogram(const float* samples, int n_samples,
 
     for (int j = 0; j < mel.n_mel; j++) {
         for (int i = 0; i < mel.n_len; i++) {
+#ifdef __APPLE__
             double val = temp_data[j * compute_frames + i];
+#else
+            double val = temp_mel.data[j * mel.n_len + i];
+#endif
             if (val < mmax) {
                 val = mmax;
             }
@@ -643,7 +644,7 @@ bool save_mel_npy(const std::string& path, const MelSpectrogram& mel) {
     header += std::to_string(mel.n_mel) + ", " + std::to_string(mel.n_len) + "), }";
     
     // Pad header to multiple of 64 bytes
-    int header_len = header.size();
+    const size_t header_len = header.size();
     int padding = 64 - ((10 + header_len) % 64);
     if (padding < 1) padding += 64;
     header.resize(header_len + padding - 1, ' ');
