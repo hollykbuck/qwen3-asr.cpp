@@ -27,7 +27,7 @@ A high-performance C++ implementation of Qwen3-ASR and Qwen3-ForcedAligner using
 ## Requirements
 
 - CMake 3.14+
-- C++17 compatible compiler (Clang 7+, GCC 8+, MSVC 2019+)
+- C++20 compatible compiler (Clang 10+, GCC 10+, MSVC 2019 16.11+)
 - Apple Silicon recommended (Metal GPU support)
 - GGML library (included as submodule)
 
