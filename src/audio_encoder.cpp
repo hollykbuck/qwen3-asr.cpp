@@ -40,19 +40,23 @@ AudioEncoder::~AudioEncoder() {
 }
 
 bool AudioEncoder::load_model(const std::string & model_path) {
+    fprintf(stderr, "DEBUG: AudioEncoder::load_model starting\n"); fflush(stderr);
     GGUFLoader loader;
     if (!loader.load(model_path, model_)) {
         error_msg_ = loader.get_error();
         return false;
     }
+    fprintf(stderr, "DEBUG: loader.load finished\n"); fflush(stderr);
     
     state_.backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
     if (!state_.backend_cpu) {
         error_msg_ = "Failed to initialize CPU backend";
         return false;
     }
+    fprintf(stderr, "DEBUG: backend_cpu init finished\n"); fflush(stderr);
 
     state_.backend_gpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr);
+    fprintf(stderr, "DEBUG: backend_gpu init finished (gpu=%p)\n", (void*)state_.backend_gpu); fflush(stderr);
 
     std::vector<ggml_backend_t> backends;
     std::vector<ggml_backend_buffer_type_t> backend_bufts;

@@ -511,7 +511,7 @@ static void ggml_log_callback_quiet(enum ggml_log_level level, const char * text
 }
 
 int main(int argc, char ** argv) {
-    ggml_log_set(ggml_log_callback_quiet, nullptr);
+    // ggml_log_set(ggml_log_callback_quiet, nullptr);
 
     cli_params params;
     
