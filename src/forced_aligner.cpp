@@ -1,5 +1,6 @@
 #include "forced_aligner.h"
 #include "mel_spectrogram.h"
+#include "portability.h"
 
 #include <cstdio>
 #include <cstring>
@@ -9,10 +10,6 @@
 #include <algorithm>
 #include <fstream>
 #include <sstream>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
 
 #define QWEN3_FA_MAX_NODES 16384
 

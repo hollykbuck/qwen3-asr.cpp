@@ -1,14 +1,13 @@
 #include "text_decoder.h"
+#include "portability.h"
 #include "timing.h"
 
+#include <algorithm>
 #include <cmath>
-#include <cstring>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
+
 
 #define QWEN3_ASR_MAX_NODES 8192
 

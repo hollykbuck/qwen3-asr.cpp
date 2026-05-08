@@ -23,7 +23,11 @@ find_package(Threads REQUIRED)
 
 # GGML library paths
 set(GGML_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ggml")
-set(GGML_BUILD_DIR "${GGML_DIR}/build")
+
+# Add GGML as a subdirectory
+option(GGML_BUILD_EXAMPLES "ggml: build examples" OFF)
+option(GGML_BUILD_TESTS "ggml: build tests" OFF)
+add_subdirectory(${GGML_DIR})
 
 # Mel spectrogram library
 add_library(mel_spectrogram STATIC
@@ -52,13 +56,8 @@ target_include_directories(audio_encoder PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${GGML_DIR}/include
 )
-target_link_directories(audio_encoder PUBLIC
-    ${GGML_BUILD_DIR}/src
-)
 target_link_libraries(audio_encoder PUBLIC
     ggml
-    ggml-base
-    ggml-cpu
     Threads::Threads
 )
 
@@ -70,13 +69,8 @@ target_include_directories(text_decoder PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${GGML_DIR}/include
 )
-target_link_directories(text_decoder PUBLIC
-    ${GGML_BUILD_DIR}/src
-)
 target_link_libraries(text_decoder PUBLIC
     ggml
-    ggml-base
-    ggml-cpu
     Threads::Threads
 )
 
@@ -112,14 +106,9 @@ target_include_directories(forced_aligner PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${GGML_DIR}/include
 )
-target_link_directories(forced_aligner PUBLIC
-    ${GGML_BUILD_DIR}/src
-)
 target_link_libraries(forced_aligner PUBLIC
     mel_spectrogram
     ggml
-    ggml-base
-    ggml-cpu
     Threads::Threads
 )
 
@@ -183,13 +172,8 @@ add_executable(test_embedding
 target_include_directories(test_embedding PRIVATE
     ${GGML_DIR}/include
 )
-target_link_directories(test_embedding PRIVATE
-    ${GGML_BUILD_DIR}/src
-)
 target_link_libraries(test_embedding PRIVATE
     ggml
-    ggml-base
-    ggml-cpu
     Threads::Threads
 )
 
