@@ -21,6 +21,10 @@ endif()
 # Find threads
 find_package(Threads REQUIRED)
 
+# Find Conan packages
+find_package(spdlog REQUIRED)
+find_package(Boost REQUIRED)
+
 # GGML library paths
 set(GGML_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ggml")
 
@@ -96,6 +100,8 @@ target_link_libraries(qwen3_asr PUBLIC
     text_decoder
     audio_injection
     Threads::Threads
+    spdlog::spdlog
+    Boost::boost
 )
 
 # ForcedAligner library
@@ -119,6 +125,8 @@ add_executable(qwen3-asr-cli
 target_link_libraries(qwen3-asr-cli PRIVATE
     qwen3_asr
     forced_aligner
+    spdlog::spdlog
+    Boost::boost
 )
 
 # Test executable for mel spectrogram

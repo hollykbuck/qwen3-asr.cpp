@@ -9,6 +9,7 @@
 #include "gguf.h"
 
 int main() {
+    printf("Starting test_embedding...\n");
     const char* model_path = "models/qwen3-asr-0.6b-f16.gguf";
     
     struct ggml_context* ggml_ctx = nullptr;
