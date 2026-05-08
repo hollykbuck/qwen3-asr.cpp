@@ -11,7 +11,8 @@ GGUFLoader::GGUFLoader() = default;
 
 GGUFLoader::~GGUFLoader() = default;
 
-bool GGUFLoader::load(const std::string & path, audio_encoder_model & model) {
+bool GGUFLoader::load(const std::string & path, audio_encoder_model & model,
+                      ggml_backend_t backend_preferred, ggml_backend_t backend_fallback) {
     fprintf(stderr, "DEBUG: GGUFLoader::load starting for path: %s\n", path.c_str());
     struct ggml_context * meta_ctx = nullptr;
     struct gguf_init_params params = {
@@ -44,7 +45,7 @@ bool GGUFLoader::load(const std::string & path, audio_encoder_model & model) {
     }
     fprintf(stderr, "DEBUG: create_tensors successful\n");
     
-    if (!load_tensor_data(path, ctx, model)) {
+    if (!load_tensor_data(path, ctx, model, backend_preferred, backend_fallback)) {
         fprintf(stderr, "DEBUG: load_tensor_data failed\n");
         free_model(model);
         gguf_free(ctx);
@@ -260,7 +261,9 @@ bool GGUFLoader::create_tensors(struct gguf_context * ctx, audio_encoder_model &
 }
 
 bool GGUFLoader::load_tensor_data(const std::string & path, struct gguf_context * ctx, 
-                                   audio_encoder_model & model) {
+                                   audio_encoder_model & model,
+                                   ggml_backend_t backend_preferred,
+                                   ggml_backend_t backend_fallback) {
     fprintf(stderr, "DEBUG: load_tensor_data starting\n");
     int fd = open(path.c_str(), O_RDONLY);
     if (fd < 0) {
@@ -284,50 +287,28 @@ bool GGUFLoader::load_tensor_data(const std::string & path, struct gguf_context 
     }
     fprintf(stderr, "DEBUG: mmap successful, addr=%p, size=%zu\n", mmap_addr, (size_t)st.st_size);
     
-    model.mmap_addr = mmap_addr;
-    model.mmap_size = st.st_size;
-    
     const size_t data_offset = gguf_get_data_offset(ctx);
-    const size_t total_size = st.st_size - data_offset;
     uint8_t * data_base = (uint8_t *)mmap_addr + data_offset;
-    
+
+    const size_t total_size = st.st_size - data_offset;
     fprintf(stderr, "DEBUG: data_offset=%zu, total_size=%zu\n", data_offset, total_size);
 
-    // Find largest tensor for max_tensor_size hint
-    const int64_t n_tensors = gguf_get_n_tensors(ctx);
-    size_t max_tensor_size = 0;
-    for (int64_t i = 0; i < n_tensors; ++i) {
-        size_t sz = gguf_get_tensor_size(ctx, i);
-        if (sz > max_tensor_size) max_tensor_size = sz;
+    ggml_backend_t weight_backend = backend_preferred ? backend_preferred : backend_fallback;
+    if (weight_backend) {
+        model.buffer = ggml_backend_alloc_ctx_tensors(model.ctx, weight_backend);
     }
-
-    fprintf(stderr, "DEBUG: max_tensor_size=%zu\n", max_tensor_size);
-
-    // Zero-copy host buffers are only available on some backends (e.g. Metal / unified memory).
-    fprintf(stderr, "DEBUG: looking for GPU device...\n");
-    ggml_backend_dev_t gpu_dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
-    if (gpu_dev) {
-        struct ggml_backend_dev_props props;
-        ggml_backend_dev_get_props(gpu_dev, &props);
-        fprintf(stderr, "DEBUG: GPU device found (%s), buffer_from_host_ptr=%d\n",
-                props.name ? props.name : "unknown", props.caps.buffer_from_host_ptr ? 1 : 0);
-        if (props.caps.buffer_from_host_ptr) {
-            model.buffer = ggml_backend_dev_buffer_from_host_ptr(gpu_dev, data_base, total_size, max_tensor_size);
-            fprintf(stderr, "DEBUG: GPU buffer creation result: %p\n", (void*)model.buffer);
-        }
+    if (!model.buffer && backend_fallback && weight_backend != backend_fallback) {
+        fprintf(stderr, "DEBUG: fallback to CPU backend weight buffer\n");
+        weight_backend = backend_fallback;
+        model.buffer = ggml_backend_alloc_ctx_tensors(model.ctx, weight_backend);
     }
     if (!model.buffer) {
-        fprintf(stderr, "DEBUG: fallback to CPU buffer\n");
-        model.buffer = ggml_backend_cpu_buffer_from_ptr(data_base, total_size);
-    }
-    if (!model.buffer) {
-        error_msg_ = "Failed to create buffer from mmap";
+        error_msg_ = "Failed to allocate audio encoder weight buffer";
         munmap(mmap_addr, st.st_size);
-        model.mmap_addr = nullptr;
-        model.mmap_size = 0;
         return false;
     }
-    
+
+    const int64_t n_tensors = gguf_get_n_tensors(ctx);
     for (int64_t i = 0; i < n_tensors; ++i) {
         const char * name = gguf_get_tensor_name(ctx, i);
         size_t offset = gguf_get_tensor_offset(ctx, i);
@@ -336,10 +317,12 @@ bool GGUFLoader::load_tensor_data(const std::string & path, struct gguf_context 
         if (it == model.tensors.end()) continue;
         
         struct ggml_tensor * tensor = it->second;
-        tensor->buffer = model.buffer;
-        tensor->data = data_base + offset;
+        const void * src = data_base + offset;
+        const size_t nbytes = ggml_nbytes(tensor);
+        ggml_backend_tensor_set(tensor, src, 0, nbytes);
     }
-    
+
+    munmap(mmap_addr, st.st_size);
     return true;
 }
 

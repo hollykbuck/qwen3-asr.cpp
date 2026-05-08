@@ -108,7 +108,8 @@ public:
     ~GGUFLoader();
     
     // Load model from GGUF file
-    bool load(const std::string & path, audio_encoder_model & model);
+    bool load(const std::string & path, audio_encoder_model & model,
+              ggml_backend_t backend_preferred, ggml_backend_t backend_fallback);
     
     // Get error message if load failed
     const std::string & get_error() const { return error_msg_; }
@@ -122,7 +123,9 @@ private:
     
     // Load tensor data from file
     bool load_tensor_data(const std::string & path, struct gguf_context * ctx, 
-                          audio_encoder_model & model);
+                          audio_encoder_model & model,
+                          ggml_backend_t backend_preferred,
+                          ggml_backend_t backend_fallback);
     
     std::string error_msg_;
 };
