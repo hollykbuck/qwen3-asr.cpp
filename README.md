@@ -1,6 +1,6 @@
 # Qwen3-ASR.cpp
 
-A high-performance C++ implementation of Qwen3-ASR and Qwen3-ForcedAligner using the GGML tensor library. Optimized for Apple Silicon with Metal GPU acceleration, providing fast speech recognition and word-level timestamp alignment.
+A high-performance C++ implementation of Qwen3-ASR and Qwen3-ForcedAligner using the GGML tensor library. Optimized for Apple Silicon with Metal GPU acceleration and configurable GGML GPU backends including CUDA, providing fast speech recognition and word-level timestamp alignment.
 
 ## Features
 
@@ -8,7 +8,7 @@ A high-performance C++ implementation of Qwen3-ASR and Qwen3-ForcedAligner using
 - **Forced Alignment**: Align reference text to audio with word-level timestamps
 - **Combined Pipeline** (`--transcribe-align`): Automatically runs ASR then alignment with auto language detection
 - **Flash Attention**: Uses `ggml_flash_attn_ext()` for fast decoding (3.7x speedup)
-- **Metal GPU Acceleration**: Optimized for Apple Silicon with dual CPU+Metal backend
+- **GPU Backends**: Dual CPU+GPU scheduling via GGML backends, including Metal on Apple Silicon and optional CUDA builds
 - **Accelerate/vDSP**: Highly optimized mel spectrogram computation (45x speedup)
 - **mmap Weight Loading**: Zero-copy GPU transfer for fast model initialization
 - **F16 KV Cache**: Reduced memory bandwidth with half-precision key-value cache
@@ -26,7 +26,7 @@ A high-performance C++ implementation of Qwen3-ASR and Qwen3-ForcedAligner using
 
 ## Requirements
 
-- CMake 3.14+
+- CMake 3.14+ for CPU-only builds, 3.18+ for CUDA builds
 - C++20 compatible compiler (Clang 10+, GCC 10+, MSVC 2019 16.11+)
 - Apple Silicon recommended (Metal GPU support)
 - GGML library (included as submodule)
@@ -45,6 +45,23 @@ cmake --build . -j$(sysctl -n hw.ncpu)
 ```
 
 On Linux, replace `$(sysctl -n hw.ncpu)` with `$(nproc)`.
+
+### CUDA build
+
+CUDA support is disabled by default. Enable it at configure time so GGML builds the `ggml-cuda` backend:
+
+```bash
+cmake --preset conan-relwithdebinfo -DQWEN3_ASR_ENABLE_CUDA=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build --preset conan-relwithdebinfo
+```
+
+If you need to pin architectures instead of letting GGML choose, add for example:
+
+```bash
+cmake --preset conan-relwithdebinfo ^
+  -DQWEN3_ASR_ENABLE_CUDA=ON ^
+  -DQWEN3_ASR_CUDA_ARCHITECTURES=86
+```
 
 ## Quick Start
 

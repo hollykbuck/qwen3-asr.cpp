@@ -18,6 +18,12 @@ if(QWEN3_ASR_TIMING)
     add_compile_definitions(QWEN3_ASR_TIMING)
 endif()
 
+# Backend configuration
+option(QWEN3_ASR_ENABLE_CUDA "Enable GGML CUDA backend" OFF)
+option(QWEN3_ASR_ENABLE_CUDA_FA "Enable GGML CUDA FlashAttention kernels" ON)
+set(QWEN3_ASR_CUDA_ARCHITECTURES "" CACHE STRING
+    "CUDA architectures passed to CMAKE_CUDA_ARCHITECTURES when QWEN3_ASR_ENABLE_CUDA=ON")
+
 # Find threads
 find_package(Threads REQUIRED)
 
@@ -28,9 +34,30 @@ find_package(Boost REQUIRED)
 # GGML library paths
 set(GGML_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ggml")
 
+# Configure GGML before adding the subdirectory
+set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "ggml: build examples" FORCE)
+set(GGML_BUILD_TESTS OFF CACHE BOOL "ggml: build tests" FORCE)
+
+if(QWEN3_ASR_ENABLE_CUDA)
+    if(CMAKE_VERSION VERSION_LESS 3.18)
+        message(FATAL_ERROR "QWEN3_ASR_ENABLE_CUDA requires CMake 3.18 or newer")
+    endif()
+
+    set(GGML_CUDA ON CACHE BOOL "ggml: use CUDA" FORCE)
+    set(GGML_CUDA_FA ${QWEN3_ASR_ENABLE_CUDA_FA} CACHE BOOL "ggml: compile ggml FlashAttention CUDA kernels" FORCE)
+
+    if(QWEN3_ASR_CUDA_ARCHITECTURES)
+        set(CMAKE_CUDA_ARCHITECTURES "${QWEN3_ASR_CUDA_ARCHITECTURES}" CACHE STRING
+            "CUDA architectures used by ggml-cuda" FORCE)
+    endif()
+
+    message(STATUS "qwen3-asr.cpp: enabling GGML CUDA backend")
+    if(QWEN3_ASR_CUDA_ARCHITECTURES)
+        message(STATUS "qwen3-asr.cpp: CMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES}")
+    endif()
+endif()
+
 # Add GGML as a subdirectory
-option(GGML_BUILD_EXAMPLES "ggml: build examples" OFF)
-option(GGML_BUILD_TESTS "ggml: build tests" OFF)
 add_subdirectory(${GGML_DIR})
 
 # Mel spectrogram library
@@ -128,6 +155,22 @@ target_link_libraries(qwen3-asr-cli PRIVATE
     spdlog::spdlog
     Boost::boost
 )
+
+function(qwen3_asr_copy_runtime_dependency target dependency)
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:${dependency}>
+            $<TARGET_FILE_DIR:${target}>
+        COMMAND_EXPAND_LISTS
+    )
+endfunction()
+
+qwen3_asr_copy_runtime_dependency(qwen3-asr-cli ggml)
+qwen3_asr_copy_runtime_dependency(qwen3-asr-cli ggml-base)
+qwen3_asr_copy_runtime_dependency(qwen3-asr-cli ggml-cpu)
+if(TARGET ggml-cuda)
+    qwen3_asr_copy_runtime_dependency(qwen3-asr-cli ggml-cuda)
+endif()
 
 # Test executable for mel spectrogram
 add_executable(test_mel
