@@ -443,7 +443,11 @@ bool ForcedAligner::load_tensor_data(const std::string & path, struct gguf_conte
 
     ggml_backend_dev_t gpu_dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
     if (gpu_dev) {
-        model_.buffer = ggml_backend_dev_buffer_from_host_ptr(gpu_dev, data_base, total_size, max_tensor_size);
+        struct ggml_backend_dev_props props;
+        ggml_backend_dev_get_props(gpu_dev, &props);
+        if (props.caps.buffer_from_host_ptr) {
+            model_.buffer = ggml_backend_dev_buffer_from_host_ptr(gpu_dev, data_base, total_size, max_tensor_size);
+        }
     }
     if (!model_.buffer) {
         model_.buffer = ggml_backend_cpu_buffer_from_ptr(data_base, total_size);

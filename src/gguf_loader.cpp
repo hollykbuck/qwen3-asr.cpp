@@ -303,13 +303,18 @@ bool GGUFLoader::load_tensor_data(const std::string & path, struct gguf_context 
 
     fprintf(stderr, "DEBUG: max_tensor_size=%zu\n", max_tensor_size);
 
-    // Try GPU device buffer (zero-copy on Apple Silicon unified memory)
+    // Zero-copy host buffers are only available on some backends (e.g. Metal / unified memory).
     fprintf(stderr, "DEBUG: looking for GPU device...\n");
     ggml_backend_dev_t gpu_dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
     if (gpu_dev) {
-        fprintf(stderr, "DEBUG: GPU device found, trying buffer_from_host_ptr\n");
-        model.buffer = ggml_backend_dev_buffer_from_host_ptr(gpu_dev, data_base, total_size, max_tensor_size);
-        fprintf(stderr, "DEBUG: GPU buffer creation result: %p\n", (void*)model.buffer);
+        struct ggml_backend_dev_props props;
+        ggml_backend_dev_get_props(gpu_dev, &props);
+        fprintf(stderr, "DEBUG: GPU device found (%s), buffer_from_host_ptr=%d\n",
+                props.name ? props.name : "unknown", props.caps.buffer_from_host_ptr ? 1 : 0);
+        if (props.caps.buffer_from_host_ptr) {
+            model.buffer = ggml_backend_dev_buffer_from_host_ptr(gpu_dev, data_base, total_size, max_tensor_size);
+            fprintf(stderr, "DEBUG: GPU buffer creation result: %p\n", (void*)model.buffer);
+        }
     }
     if (!model.buffer) {
         fprintf(stderr, "DEBUG: fallback to CPU buffer\n");
