@@ -44,8 +44,8 @@ static void test_embed_tokens() {
     int32_t input_ids[] = {0, 5, 3};
     int32_t n_tokens = 3;
     
-    float output[n_tokens * hidden_size];
-    embed_tokens(input_ids, n_tokens, token_embd, vocab_size, hidden_size, output);
+    std::vector<float> output(n_tokens * hidden_size);
+    embed_tokens(input_ids, n_tokens, token_embd, vocab_size, hidden_size, output.data());
     
     assert(float_eq(output[0], 0.0f));
     assert(float_eq(output[1], 1.0f));

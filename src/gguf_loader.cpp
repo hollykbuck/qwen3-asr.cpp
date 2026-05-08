@@ -1,12 +1,9 @@
 #include "gguf_loader.h"
+#include "portability.h"
 
 #include <cstdio>
 #include <cstring>
 #include <fstream>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
 
 namespace qwen3_asr {
 
