@@ -56,6 +56,16 @@ bool TextDecoder::load_model(const std::string & model_path) {
         if (meta_ctx) ggml_free(meta_ctx);
         return false;
     }
+
+    state_.backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
+    if (!state_.backend_cpu) {
+        error_msg_ = "Failed to initialize CPU backend";
+        gguf_free(ctx);
+        if (meta_ctx) ggml_free(meta_ctx);
+        return false;
+    }
+
+    state_.backend_gpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr);
     
     if (!load_tensor_data(model_path, ctx)) {
         free_decoder_model(model_);
@@ -73,14 +83,6 @@ bool TextDecoder::load_model(const std::string & model_path) {
     
     gguf_free(ctx);
     if (meta_ctx) ggml_free(meta_ctx);
-    
-    state_.backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
-    if (!state_.backend_cpu) {
-        error_msg_ = "Failed to initialize CPU backend";
-        return false;
-    }
-
-    state_.backend_gpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr);
 
     std::vector<ggml_backend_t> backends;
     std::vector<ggml_backend_buffer_type_t> backend_bufts;
@@ -286,40 +288,22 @@ bool TextDecoder::load_tensor_data(const std::string & path, struct gguf_context
         return false;
     }
     
-    model_.mmap_addr = mmap_addr;
-    model_.mmap_size = st.st_size;
-    
     const size_t data_offset = gguf_get_data_offset(ctx);
-    const size_t total_size = st.st_size - data_offset;
     uint8_t * data_base = (uint8_t *)mmap_addr + data_offset;
-    
-    const int64_t n_tensors = gguf_get_n_tensors(ctx);
-    size_t max_tensor_size = 0;
-    for (int64_t i = 0; i < n_tensors; ++i) {
-        size_t sz = gguf_get_tensor_size(ctx, i);
-        if (sz > max_tensor_size) max_tensor_size = sz;
-    }
 
-    // Zero-copy host buffers are backend-specific. CUDA will typically fall back to CPU-backed mmap weights.
-    ggml_backend_dev_t gpu_dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
-    if (gpu_dev) {
-        struct ggml_backend_dev_props props;
-        ggml_backend_dev_get_props(gpu_dev, &props);
-        if (props.caps.buffer_from_host_ptr) {
-            model_.buffer = ggml_backend_dev_buffer_from_host_ptr(gpu_dev, data_base, total_size, max_tensor_size);
-        }
+    ggml_backend_t weight_backend = state_.backend_gpu ? state_.backend_gpu : state_.backend_cpu;
+    model_.buffer = ggml_backend_alloc_ctx_tensors(model_.ctx, weight_backend);
+    if (!model_.buffer && weight_backend != state_.backend_cpu) {
+        weight_backend = state_.backend_cpu;
+        model_.buffer = ggml_backend_alloc_ctx_tensors(model_.ctx, weight_backend);
     }
     if (!model_.buffer) {
-        model_.buffer = ggml_backend_cpu_buffer_from_ptr(data_base, total_size);
-    }
-    if (!model_.buffer) {
-        error_msg_ = "Failed to create buffer from mmap";
+        error_msg_ = "Failed to allocate decoder weight buffer";
         munmap(mmap_addr, st.st_size);
-        model_.mmap_addr = nullptr;
-        model_.mmap_size = 0;
         return false;
     }
-    
+
+    const int64_t n_tensors = gguf_get_n_tensors(ctx);
     for (int64_t i = 0; i < n_tensors; ++i) {
         const char * name = gguf_get_tensor_name(ctx, i);
         size_t offset = gguf_get_tensor_offset(ctx, i);
@@ -328,10 +312,12 @@ bool TextDecoder::load_tensor_data(const std::string & path, struct gguf_context
         if (it == model_.tensors.end()) continue;
         
         struct ggml_tensor * tensor = it->second;
-        tensor->buffer = model_.buffer;
-        tensor->data = data_base + offset;
+        const void * src = data_base + offset;
+        const size_t nbytes = ggml_nbytes(tensor);
+        ggml_backend_tensor_set(tensor, src, 0, nbytes);
     }
-    
+
+    munmap(mmap_addr, st.st_size);
     return true;
 }
 
@@ -393,6 +379,7 @@ void TextDecoder::clear_kv_cache() {
 struct ggml_cgraph * TextDecoder::build_graph(
     const int32_t * tokens, int32_t n_tokens, int32_t n_past,
     const float * audio_embd, int32_t n_audio, int32_t audio_start_pos) {
+    QWEN3_TIMER("decoder.build_graph");
     
     const auto & cfg = model_.config;
     const int n_head = cfg.n_attention_heads;
@@ -609,12 +596,19 @@ bool TextDecoder::forward_with_audio(
         return false;
     }
     
-    struct ggml_cgraph * gf = build_graph(tokens, n_tokens, n_past,
-                                          audio_embd, n_audio, audio_start_pos);
+    struct ggml_cgraph * gf = nullptr;
+    {
+        QWEN3_TIMER("decoder.forward.build_graph");
+        gf = build_graph(tokens, n_tokens, n_past,
+                         audio_embd, n_audio, audio_start_pos);
+    }
     
-    if (!ggml_backend_sched_alloc_graph(state_.sched, gf)) {
-        error_msg_ = "Failed to allocate graph";
-        return false;
+    {
+        QWEN3_TIMER("decoder.forward.alloc_graph");
+        if (!ggml_backend_sched_alloc_graph(state_.sched, gf)) {
+            error_msg_ = "Failed to allocate graph";
+            return false;
+        }
     }
     
     struct ggml_tensor * inp_tokens = ggml_graph_get_tensor(gf, "inp_tokens");
@@ -623,7 +617,10 @@ bool TextDecoder::forward_with_audio(
         ggml_backend_sched_reset(state_.sched);
         return false;
     }
-    ggml_backend_tensor_set(inp_tokens, tokens, 0, n_tokens * sizeof(int32_t));
+    {
+        QWEN3_TIMER("decoder.forward.set_tokens");
+        ggml_backend_tensor_set(inp_tokens, tokens, 0, n_tokens * sizeof(int32_t));
+    }
     
     struct ggml_tensor * inp_pos = ggml_graph_get_tensor(gf, "inp_pos");
     if (inp_pos) {
@@ -631,26 +628,35 @@ bool TextDecoder::forward_with_audio(
         for (int i = 0; i < n_tokens; ++i) {
             positions[i] = n_past + i;
         }
+        QWEN3_TIMER("decoder.forward.set_positions");
         ggml_backend_tensor_set(inp_pos, positions.data(), 0, n_tokens * sizeof(int32_t));
     }
     
     struct ggml_tensor * fa_mask_t = ggml_graph_get_tensor(gf, "fa_mask");
     if (fa_mask_t) {
         int n_kv = n_past + n_tokens;
-        std::vector<ggml_fp16_t> mask_data((size_t)n_kv * n_tokens);
-        const ggml_fp16_t zero_f16 = ggml_fp32_to_fp16(0.0f);
-        const ggml_fp16_t neginf_f16 = ggml_fp32_to_fp16(-INFINITY);
-        for (int q = 0; q < n_tokens; ++q) {
-            for (int k = 0; k < n_kv; ++k) {
-                mask_data[k + q * n_kv] = (k <= n_past + q) ? zero_f16 : neginf_f16;
+        std::vector<ggml_fp16_t> mask_data;
+        {
+            QWEN3_TIMER("decoder.forward.build_mask_data");
+            mask_data.resize((size_t)n_kv * n_tokens);
+            const ggml_fp16_t zero_f16 = ggml_fp32_to_fp16(0.0f);
+            const ggml_fp16_t neginf_f16 = ggml_fp32_to_fp16(-INFINITY);
+            for (int q = 0; q < n_tokens; ++q) {
+                for (int k = 0; k < n_kv; ++k) {
+                    mask_data[k + q * n_kv] = (k <= n_past + q) ? zero_f16 : neginf_f16;
+                }
             }
         }
-        ggml_backend_tensor_set(fa_mask_t, mask_data.data(), 0, mask_data.size() * sizeof(ggml_fp16_t));
+        {
+            QWEN3_TIMER("decoder.forward.set_mask");
+            ggml_backend_tensor_set(fa_mask_t, mask_data.data(), 0, mask_data.size() * sizeof(ggml_fp16_t));
+        }
     }
     
     if (audio_embd && n_audio > 0) {
         struct ggml_tensor * inp_audio = ggml_graph_get_tensor(gf, "inp_audio");
         if (inp_audio) {
+            QWEN3_TIMER("decoder.forward.set_audio");
             ggml_backend_tensor_set(inp_audio, audio_embd, 0, 
                                     n_audio * model_.config.hidden_size * sizeof(float));
         }
@@ -675,11 +681,17 @@ bool TextDecoder::forward_with_audio(
     int64_t vocab_size = logits->ne[0];
     int64_t n_logit_rows = logits->ne[1];
     output.resize(n_logit_rows * vocab_size);
-    ggml_backend_tensor_get(logits, output.data(), 0, output.size() * sizeof(float));
+    {
+        QWEN3_TIMER("decoder.forward.read_logits");
+        ggml_backend_tensor_get(logits, output.data(), 0, output.size() * sizeof(float));
+    }
     
     state_.cache.n_used = n_past + n_tokens;
     
-    ggml_backend_sched_reset(state_.sched);
+    {
+        QWEN3_TIMER("decoder.forward.sched_reset");
+        ggml_backend_sched_reset(state_.sched);
+    }
     
     return true;
 }
