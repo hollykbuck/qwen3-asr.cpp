@@ -21,12 +21,12 @@ Qwen3ASR::~Qwen3ASR() = default;
 bool Qwen3ASR::load_model(const std::string & model_path) {
     int64_t t_start = get_time_ms();
     
-    if (!encoder_.load_model(model_path)) {
+    if (!encoder_.load_model(model_path, gpu_device_)) {
         error_msg_ = "Failed to load audio encoder: " + encoder_.get_error();
         return false;
     }
     
-    if (!decoder_.load_model(model_path)) {
+    if (!decoder_.load_model(model_path, gpu_device_)) {
         error_msg_ = "Failed to load text decoder: " + decoder_.get_error();
         return false;
     }

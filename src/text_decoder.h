@@ -109,7 +109,7 @@ public:
     ~TextDecoder();
     
     // Load model from GGUF file
-    bool load_model(const std::string & model_path);
+    bool load_model(const std::string & model_path, int gpu_device = -1);
     
     // Initialize KV cache for given context length
     bool init_kv_cache(int32_t n_ctx);

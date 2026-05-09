@@ -79,6 +79,10 @@ public:
     
     // Get model config
     const text_decoder_config & get_config() const { return decoder_.get_config(); }
+
+    // Set GPU device index (-1 for default)
+    void set_gpu_device(int device_id) { gpu_device_ = device_id; }
+    int get_gpu_device() const { return gpu_device_; }
     
 private:
     // Internal transcription implementation
@@ -106,6 +110,7 @@ private:
     
     // State
     bool model_loaded_ = false;
+    int gpu_device_ = -1;
     std::string error_msg_;
     progress_callback_t progress_callback_;
 };

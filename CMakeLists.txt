@@ -131,6 +131,20 @@ target_link_libraries(qwen3_asr PUBLIC
     Boost::boost
 )
 
+# Shared library for C/Python integration
+add_library(qwen3_asr_shared SHARED
+    src/qwen3_asr_c.cpp
+)
+target_include_directories(qwen3_asr_shared PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(qwen3_asr_shared PRIVATE
+    qwen3_asr
+)
+if(WIN32)
+    target_compile_definitions(qwen3_asr_shared PRIVATE QWEN3_ASR_SHARED_EXPORTS)
+endif()
+
 # ForcedAligner library
 add_library(forced_aligner STATIC
     src/forced_aligner.cpp
@@ -170,6 +184,20 @@ qwen3_asr_copy_runtime_dependency(qwen3-asr-cli ggml-base)
 qwen3_asr_copy_runtime_dependency(qwen3-asr-cli ggml-cpu)
 if(TARGET ggml-cuda)
     qwen3_asr_copy_runtime_dependency(qwen3-asr-cli ggml-cuda)
+endif()
+if(TARGET ggml-vulkan)
+    qwen3_asr_copy_runtime_dependency(qwen3-asr-cli ggml-vulkan)
+endif()
+
+# Also copy dependencies for the shared library to ensure it's self-contained
+qwen3_asr_copy_runtime_dependency(qwen3_asr_shared ggml)
+qwen3_asr_copy_runtime_dependency(qwen3_asr_shared ggml-base)
+qwen3_asr_copy_runtime_dependency(qwen3_asr_shared ggml-cpu)
+if(TARGET ggml-cuda)
+    qwen3_asr_copy_runtime_dependency(qwen3_asr_shared ggml-cuda)
+endif()
+if(TARGET ggml-vulkan)
+    qwen3_asr_copy_runtime_dependency(qwen3_asr_shared ggml-vulkan)
 endif()
 
 # Test executable for mel spectrogram

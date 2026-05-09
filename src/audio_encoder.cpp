@@ -39,7 +39,7 @@ AudioEncoder::~AudioEncoder() {
     free_model(model_);
 }
 
-bool AudioEncoder::load_model(const std::string & model_path) {
+bool AudioEncoder::load_model(const std::string & model_path, int gpu_device) {
     fprintf(stderr, "DEBUG: AudioEncoder::load_model starting\n"); fflush(stderr);
 
     state_.backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
@@ -49,7 +49,19 @@ bool AudioEncoder::load_model(const std::string & model_path) {
     }
     fprintf(stderr, "DEBUG: backend_cpu init finished\n"); fflush(stderr);
 
-    state_.backend_gpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr);
+    if (gpu_device >= 0) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get((size_t)gpu_device);
+        if (dev) {
+            const char * ddesc = ggml_backend_dev_description(dev);
+            fprintf(stderr, "DEBUG: Using requested device %d: %s\n", gpu_device, ddesc);
+            state_.backend_gpu = ggml_backend_dev_init(dev, nullptr);
+        } else {
+            fprintf(stderr, "Warning: Requested device index %d not found, falling back to default GPU\n", gpu_device);
+            state_.backend_gpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr);
+        }
+    } else {
+        state_.backend_gpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr);
+    }
     fprintf(stderr, "DEBUG: backend_gpu init finished (gpu=%p)\n", (void*)state_.backend_gpu); fflush(stderr);
 
     GGUFLoader loader;

@@ -32,7 +32,7 @@ TextDecoder::~TextDecoder() {
     free_decoder_model(model_);
 }
 
-bool TextDecoder::load_model(const std::string & model_path) {
+bool TextDecoder::load_model(const std::string & model_path, int gpu_device) {
     struct ggml_context * meta_ctx = nullptr;
     struct gguf_init_params params = {
         /*.no_alloc =*/ true,
@@ -65,7 +65,16 @@ bool TextDecoder::load_model(const std::string & model_path) {
         return false;
     }
 
-    state_.backend_gpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr);
+    if (gpu_device >= 0) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get((size_t)gpu_device);
+        if (dev) {
+            state_.backend_gpu = ggml_backend_dev_init(dev, nullptr);
+        } else {
+            state_.backend_gpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr);
+        }
+    } else {
+        state_.backend_gpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr);
+    }
     
     if (!load_tensor_data(model_path, ctx)) {
         free_decoder_model(model_);
