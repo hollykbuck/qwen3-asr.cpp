@@ -40,10 +40,11 @@ It performs speech recognition and forced alignment with word-level timestamps.
 
 ### Build System
 
-- CMake 3.14+, C++17
+- CMake 3.31, C++20
 - GGML included as git submodule at `./ggml`
 - Accelerate framework linked on Apple for vDSP mel spectrogram
-- Build: `cmake --build build -j$(sysctl -n hw.ncpu)`
+- Configure: `cmake --preset conan-relwithdebinfo -DQWEN3_ASR_ENABLE_CUDA=ON -DQWEN3_ASR_TIMING=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON`
+- Build: `cmake --build --preset conan-relwithdebinfo`
 
 ### Testing
 
@@ -84,19 +85,10 @@ Memory: ~247 MB RSS, ~294 MB Metal
 
 ### When Adding Features
 
-1. **Maintain compatibility** with GGML submodule API
-2. **Profile before optimizing** using `QWEN3_ASR_TIMING` build flag
-3. **Follow existing patterns** for error handling and memory management
-4. **Test on real audio** (not just synthetic data)
-5. **Update benchmarks** if modifying hot paths
-
-### Common Pitfalls
-
-- Don't break mmap compatibility (weight tensors must use mmap buffer)
-- Don't change tensor layout without updating GGUF conversion script
-- Flash attention requires contiguous memory layout
-- Korean dictionary must be UTF-8 encoded
-- Audio must be 16kHz mono PCM (conversion required otherwise)
+1. **Profile before optimizing** using `QWEN3_ASR_TIMING` build flag
+2. **Follow existing patterns** for error handling and memory management
+3. **Test on real audio** (not just synthetic data)
+4. **Update benchmarks** if modifying hot paths
 
 ### File Organization
 
