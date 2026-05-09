@@ -243,7 +243,7 @@ private:
     
     // Build computation graph for decoder forward pass
     struct ggml_cgraph * build_decoder_graph(
-        const int32_t * tokens, int32_t n_tokens,
+        int32_t n_tokens,
         const float * audio_embd, int32_t n_audio,
         int32_t audio_start_pos);
     
