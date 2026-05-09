@@ -925,7 +925,7 @@ bool ForcedAligner::encode_audio(const float * mel_data, int n_mel, int n_frames
 }
 
 struct ggml_cgraph * ForcedAligner::build_decoder_graph(
-    const int32_t * tokens, int32_t n_tokens,
+    int32_t n_tokens,
     const float * audio_embd, int32_t n_audio,
     int32_t audio_start_pos) {
     
@@ -1097,7 +1097,7 @@ bool ForcedAligner::forward_decoder(
         return false;
     }
     
-    struct ggml_cgraph * gf = build_decoder_graph(tokens, n_tokens,
+    struct ggml_cgraph * gf = build_decoder_graph(n_tokens,
                                                    audio_embd, n_audio, audio_start_pos);
     if (!gf) {
         error_msg_ = "Failed to build decoder graph";

@@ -503,7 +503,7 @@ static int run_transcribe_and_align(const cli_params & params) {
     return 0;
 }
 
-static void ggml_log_callback_quiet(enum ggml_log_level level, const char * text, void * user_data) {
+[[maybe_unused]] static void ggml_log_callback_quiet(enum ggml_log_level level, const char * text, void * user_data) {
     (void)user_data;
     if (level >= GGML_LOG_LEVEL_WARN) {
         fputs(text, stderr);
