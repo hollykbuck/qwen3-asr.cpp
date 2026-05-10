@@ -23,9 +23,9 @@ jobs:
           submodules: recursive
 
       - name: Install Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@v1.2
+        uses: hollykbuck/install-vulkan-sdk@main
         with:
-          version: 1.4.309.0
+          version: 1.4.341.1
           cache: true
 
       - name: Install Conan
