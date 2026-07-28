@@ -39,6 +39,7 @@ endif()
 add_subdirectory(ggml)
 file(GLOB SOURCES "src/*.*")
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/server.cpp")
+list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/model_converter.cpp")
 
 find_package(Threads REQUIRED)
 
@@ -190,6 +191,23 @@ if (QWEN3_ASR_TEST)
 
     add_test(NAME test_tokenization COMMAND test_tokenization)
 endif ()
+
+# ==================================== Converter ====================================
+find_package(nlohmann_json REQUIRED)
+
+add_executable(qwen3-asr-converter
+        cli/convert_main.cpp
+        src/model_converter.cpp
+)
+
+target_include_directories(qwen3-asr-converter PRIVATE
+        ggml/include
+        ggml/src
+        include
+        src
+)
+
+target_link_libraries(qwen3-asr-converter PRIVATE qwen3-asr ggml nlohmann_json::nlohmann_json Threads::Threads)
 
 install(TARGETS qwen3-asr qwen3-asr-cli qwen3-asr-server
     LIBRARY DESTINATION lib
