@@ -44,7 +44,7 @@ It performs speech recognition and forced alignment with word-level timestamps.
 
 ### Build System
 
-- CMake 3.14+, C++17
+- CMake 3.14+, C++20
 - GGML included as git submodule at `./ggml`
 - `third_party/httplib.h` provides the single-header HTTP server dependency
 - Accelerate framework linked on Apple for vDSP mel spectrogram

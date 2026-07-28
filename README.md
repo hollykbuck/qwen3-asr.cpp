@@ -15,7 +15,7 @@ A high-performance C++ implementation of Qwen3-ASR and Qwen3-ForcedAligner using
 - **F16 KV Cache**: Reduced memory bandwidth with half-precision key-value cache
 - **Korean Word Splitting**: Soynlp LTokenizer algorithm with 18K-word dictionary
 - **Quantization Support**: Q8_0 quantization for reduced memory usage (~40% smaller)
-- **Pure C++17**: No Python runtime required for inference
+- **Pure C++20**: No Python runtime required for inference
 
 ## Supported Models
 
@@ -28,7 +28,7 @@ A high-performance C++ implementation of Qwen3-ASR and Qwen3-ForcedAligner using
 ## Requirements
 
 - CMake 3.14+
-- C++17 compatible compiler (Clang 7+, GCC 8+, MSVC 2019+)
+- C++20 compatible compiler (Clang 7+, GCC 8+, MSVC 2019+)
 - Apple Silicon recommended (Metal GPU support)
 - GGML library (included as submodule)
 - ffmpeg (optional, only needed for server-side audio conversion with `--convert`)
